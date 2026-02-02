@@ -1,0 +1,12 @@
+{
+  "name": "heliclock-hop",
+  "version": "0.1.0",
+  "description": "HeliCore WASM engine for HOP",
+  "main": "heli_engine.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "aboynejames",
+  "license": "GPL-3.0"
+}
