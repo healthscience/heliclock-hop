@@ -171,7 +171,26 @@ async function __wbg_init(module_or_path) {
     const imports = __wbg_get_imports();
 
     if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
-        module_or_path = fetch(module_or_path);
+        if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+            const fs = await import('fs');
+            const { fileURLToPath } = await import('url');
+            let path;
+            if (module_or_path instanceof URL) {
+                path = fileURLToPath(module_or_path);
+            } else if (typeof module_or_path === 'string' && module_or_path.startsWith('file://')) {
+                path = fileURLToPath(module_or_path);
+            } else if (typeof module_or_path === 'string') {
+                path = module_or_path;
+            }
+
+            if (path) {
+                module_or_path = fs.promises.readFile(path);
+            } else {
+                module_or_path = fetch(module_or_path);
+            }
+        } else {
+            module_or_path = fetch(module_or_path);
+        }
     }
 
     const { instance, module } = await __wbg_load(await module_or_path, imports);
