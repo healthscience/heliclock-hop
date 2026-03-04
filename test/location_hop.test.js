@@ -6,14 +6,11 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Point to the existing database in the location-hop agent folder for testing
-const DB_PATH = path.join(__dirname, '../../agents/location-hop/cities.db');
-
 describe('LocationHop', () => {
     let hopper;
 
     beforeAll(async () => {
-        hopper = new LocationHop(DB_PATH);
+        hopper = new LocationHop();
         await hopper.init();
     });
 
