@@ -1,12 +1,18 @@
 {
   "name": "heliclock-hop",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "HeliCore WASM engine for HOP",
   "main": "src/heli_engine.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "aboynejames",
-  "license": "GPL-3.0"
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
 }
