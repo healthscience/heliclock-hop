@@ -27,7 +27,6 @@ class HeliLocation extends EventEmitter  {
      * set the default clock
     */
     setDefaultClock(peerClock) {
-      console.log('set peer clock on start------------')
       this.lat = peerClock.lat
       this.lon = peerClock.lon
     }
@@ -169,23 +168,50 @@ class HeliLocation extends EventEmitter  {
         return new Date(Math.floor(midTs));
     }
     
-    /* Inside HeliLocation class */
+    /*
+    *  Calculate age from gensis signature
+    */
+    calculateSolarAge(genesisSignature, currentHeliState) {
+        // 1. Full Orbits (Completed Circles)
+        // This comes from your 'Orbits Completed' counter + the transition of the sun
+        const baselineOrbits = genesisSignature.orbits; 
+
+        // 2. The Fractional Orbit (The current slice of the circle)
+        // genesisSignature.orbital: The degree you were born at (e.g., 90°)
+        // currentHeliState.yearly: The degree the sun is at now (e.g., 350°)
+        
+        let degreeDiff = currentHeliState.yearly - genesisSignature.orbital;
+        
+        // If the sun has passed the anchor this year, the diff is positive.
+        // If it hasn't reached it yet, it's negative, so we add 360 to get the 'arc traveled'.
+        if (degreeDiff < 0) {
+            degreeDiff += 360;
+        }
+
+        const fractionalOrbit = degreeDiff / 360;
+
+        // 3. The Result
+        // This is the actual physical displacement of the Earth since your Genesis.
+        const solarAge = baselineOrbits + fractionalOrbit;
+        
+        return {
+            whole: Math.floor(solarAge),
+            decimal: (solarAge % 1).toFixed(6).split('.')[1],
+            total: solarAge.toFixed(6)
+        };
+    }
 
     /**
      * Start the solar heartbeat
      * @param {Object} signature - The data from Hyperbee (lat, lon, orbital, orbits)
      */
     activateSolarHeartbeat(signature) {
-        console.log('solar breat setupppppppppppppppppppppppp')
-        console.log(signature)
         this.lat = signature.location.lat;
         this.lon = signature.location.long;
-        console.log('lat on thse fo rclasssssss')
-        console.log(this.lat)
-        console.log(this.lon)
         this.birthOrbital = signature.orbital; // The degree when they were born
         this.baseOrbits = signature.orbits;    // The "Laps" completed at setup
         this.emit('HELI_DEGREE_SIGNATURE', {
+            location: signature.location,
             birthorbital: this.birthOrbital,
             sun: signature.daily,
             signed: true
@@ -200,9 +226,6 @@ class HeliLocation extends EventEmitter  {
     }
 
     updateHeliState() {
-        console.log('update on heli state')
-        console.log(this.lat)
-        console.log(this.lon)
         // 1. Check for hydration
         if (!this.lat || !this.lon) {
             console.warn("Heli Heartbeat: Waiting for Lat/Lon hydration...");
@@ -219,10 +242,14 @@ class HeliLocation extends EventEmitter  {
 
         // Calculate Solar Age to 4 decimal places
         // How many degrees have we moved since the birth orbital?
-        const degreesSinceBirth = (currentOrbital - this.birthOrbital + 360) % 360;
+        /*const degreesSinceBirth = (currentOrbital - this.birthOrbital + 360) % 360;
         const currentLapProgress = degreesSinceBirth / 360;
-        const solarAge = (this.baseOrbits + currentLapProgress).toFixed(4);
-
+        const solarAge = (this.baseOrbits + currentLapProgress).toFixed(4);*/
+        // Calculate age based on Geometry, not "Old World" milliseconds
+        const solarAge = this.calculateSolarAge({ orbits: this.baseOrbits, orbital: this.birthOrbital}, { 
+            yearly: currentOrbital, 
+            daily: currentDaily 
+        });
         // This is for "Clock Position" (SVG Rotate)
         const rotation = this.calculateDailyRotation(ts, lon);
 
@@ -230,7 +257,6 @@ class HeliLocation extends EventEmitter  {
         const currentDegreeFloor = Math.floor(currentDaily);
         if (currentDegreeFloor !== this.lastH) {
             this.lastH = currentDegreeFloor;
-            console.log('yes emit please')
             
             this.emit('HELI_DEGREE_PULSE', {
                 age: solarAge,
@@ -243,7 +269,7 @@ class HeliLocation extends EventEmitter  {
     }
 
     /**
-     * Close database connection
+     * orib maths
     */
     calculateDailyRotation(ts, lon) {
     const date = new Date(Number(ts));
