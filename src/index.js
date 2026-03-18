@@ -1,6 +1,14 @@
 import EventEmitter from 'events'
-import initHeliCore, { HeliCore } from './heli_engine.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import initHeliCore, { HeliCore } from './heli_clock.js';
 import { searchCities, close as closeDb } from 'location-hop';
+
+// THE PHYSICAL TRUTH CONSTANTS
+const NETWORK_GENESIS_MS = 1774017960000n; // March 20, 2026, 14:46:00 UTC
+const NETWORK_LONGITUDE = -41.5;           // Atlantic Prime Meridian
+const MS_PER_YEAR = 31556952000;           // Tropical Year duration
 
 class HeliLocation extends EventEmitter  {
     constructor() {
@@ -16,10 +24,62 @@ class HeliLocation extends EventEmitter  {
      * Initializes HeliCore WASM
      */
     async init() {
-        if (!this.heliCoreInitialized) {
-            await initHeliCore();
-            this.heliCoreInitialized = true;
-        }
+      if (!this.heliCoreInitialized) {
+        // 1. Get the actual path to the .wasm file
+        const __dirname = path.dirname(fileURLToPath(import.meta.url));
+        const wasmPath = path.join(__dirname, 'heli_clock_bg.wasm');
+
+        // 2. Read the file as a buffer (The "Pure" local-first way)
+        const wasmBuffer = await fs.readFile(wasmPath);
+
+        // 3. Initialize by passing the buffer directly 
+        // This stops the engine from trying to use 'fetch'
+        await initHeliCore(wasmBuffer);
+
+        this.heliCoreInitialized = true;
+      }
+    }
+
+    /**
+     * THE HELI-STAMP (New World Coordinate)
+     * Generates a coordinate relative to the 2026 Spring Equinox.
+     * Use this for all Peer-to-Peer contracts and shared Besearch cycles.
+     */
+    getHeliStamp(internalMs) {
+        const ts = BigInt(internalMs);
+        
+        // 1. Network Orbital Progress (The "Year" count since Equinox)
+        // If before 2026, this will be negative, which is fine for the spiral.
+        const elapsed = Number(ts - NETWORK_GENESIS_MS);
+        const networkYear = elapsed / MS_PER_YEAR;
+
+        // 2. Network Solar Arc (The "Day" fraction)
+        // Calculated relative to the Atlantic Truth Longitude
+        const networkArc = this.calculateDailyRotation(ts, NETWORK_LONGITUDE) / 360;
+
+        return {
+            age: networkYear.toFixed(9), // Public Network Age
+            arc: networkArc.toFixed(4),  // Shared Geometric position
+            stamp: `net.${networkYear.toFixed(9)}`
+        };
+    }
+
+    /**
+     * Internal Peer Age (Private)
+     * Calculated from your personal Genesis Signature.
+     */
+    calculateSolarAge(genesisSignature, currentOrbital) {
+        let degreeDiff = currentOrbital - genesisSignature.orbital;
+        if (degreeDiff < 0) degreeDiff += 360;
+
+        const fractionalOrbit = degreeDiff / 360;
+        const solarAge = genesisSignature.orbits + fractionalOrbit;
+        
+        return {
+            total: solarAge.toFixed(9),
+            whole: Math.floor(solarAge),
+            fraction: (solarAge % 1).toFixed(4).split('.')[1]
+        };
     }
 
     /**
@@ -171,40 +231,6 @@ class HeliLocation extends EventEmitter  {
     /*
     *  Calculate age from gensis signature
     */
-    calculateSolarAge(genesisSignature, currentHeliState) {
-        // 1. Full Orbits (Completed Circles)
-        // This comes from your 'Orbits Completed' counter + the transition of the sun
-        const baselineOrbits = genesisSignature.orbits; 
-
-        // 2. The Fractional Orbit (The current slice of the circle)
-        // genesisSignature.orbital: The degree you were born at (e.g., 90°)
-        // currentHeliState.yearly: The degree the sun is at now (e.g., 350°)
-        
-        let degreeDiff = currentHeliState.yearly - genesisSignature.orbital;
-        
-        // If the sun has passed the anchor this year, the diff is positive.
-        // If it hasn't reached it yet, it's negative, so we add 360 to get the 'arc traveled'.
-        if (degreeDiff < 0) {
-            degreeDiff += 360;
-        }
-
-        const fractionalOrbit = degreeDiff / 360;
-
-        // 3. The Result
-        // This is the actual physical displacement of the Earth since your Genesis.
-        const solarAge = baselineOrbits + fractionalOrbit;
-        
-        return {
-            whole: Math.floor(solarAge),
-            decimal: (solarAge % 1).toFixed(6).split('.')[1],
-            total: solarAge.toFixed(6)
-        };
-    }
-
-    /**
-     * Start the solar heartbeat
-     * @param {Object} signature - The data from Hyperbee (lat, lon, orbital, orbits)
-     */
     activateSolarHeartbeat(signature) {
         this.lat = signature.location.lat;
         this.lon = signature.location.long;
@@ -226,70 +252,63 @@ class HeliLocation extends EventEmitter  {
     }
 
     updateHeliState() {
-        // 1. Check for hydration
-        if (!this.lat || !this.lon) {
-            console.warn("Heli Heartbeat: Waiting for Lat/Lon hydration...");
-            return; 
-        }
+        if (!this.lat || !this.lon) return;
 
         const ts = BigInt(Date.now());
-        // 2. Ensure numbers are clean
-        const lat = parseFloat(this.lat);
-        const lon = parseFloat(this.lon);
-
         const currentOrbital = HeliCore.get_orbital_degree(ts);
-        const currentDaily = HeliCore.get_zenith_angle(this.lat, this.lon, ts);
+        const currentZenith = HeliCore.get_zenith_angle(this.lat, this.lon, ts);
 
-        // Calculate Solar Age to 4 decimal places
-        // How many degrees have we moved since the birth orbital?
-        /*const degreesSinceBirth = (currentOrbital - this.birthOrbital + 360) % 360;
-        const currentLapProgress = degreesSinceBirth / 360;
-        const solarAge = (this.baseOrbits + currentLapProgress).toFixed(4);*/
-        // Calculate age based on Geometry, not "Old World" milliseconds
-        const solarAge = this.calculateSolarAge({ orbits: this.baseOrbits, orbital: this.birthOrbital}, { 
-            yearly: currentOrbital, 
-            daily: currentDaily 
-        });
-        // This is for "Clock Position" (SVG Rotate)
-        const rotation = this.calculateDailyRotation(ts, lon);
+        // 1. PRIVATE: My Biological Age
+        const myAge = this.calculateSolarAge(
+            { orbits: this.baseOrbits, orbital: this.birthOrbital }, 
+            currentOrbital
+        );
 
-        // 1 Degree Pulse Check (Daily Cycle)
-        const currentDegreeFloor = Math.floor(currentDaily);
+        // 2. PUBLIC: The Network HeliStamp (2026 Equinox Anchor)
+        const netStamp = this.getHeliStamp(ts);
+
+        // 3. GEOMETRY: The SVG Rotation for the clock face
+        const rotation = this.calculateDailyRotation(ts, this.lon);
+
+        const currentDegreeFloor = Math.floor(currentZenith);
         if (currentDegreeFloor !== this.lastH) {
             this.lastH = currentDegreeFloor;
             
             this.emit('HELI_DEGREE_PULSE', {
-                age: solarAge,
+                age: myAge,       // For internal logs
+                heliStamp: netStamp.age,  // For Peer Contracts
                 yearly: currentOrbital,
                 daily: rotation,
-                zenith: currentDaily,
+                zenith: currentZenith,
                 isWedgePulse: true
             });
         }
+    }
+
+    calculateDailyRotation(ts, lon) {
+        const date = new Date(Number(ts));
+        const utcHours = date.getUTCHours() + 
+                         date.getUTCMinutes() / 60 + 
+                         date.getUTCSeconds() / 3600;
+
+        // Solar time adjusted for the "Location of Truth" (Longitude)
+        const localSolarTime = (utcHours + (lon / 15) + 24) % 24;
+        return (localSolarTime / 24) * 360;
     }
 
     /**
      * orib maths
     */
     calculateDailyRotation(ts, lon) {
-    const date = new Date(Number(ts));
-    
-    // 1. Get UTC hours, minutes, seconds as a decimal
-    const utcHours = date.getUTCHours() + 
-                     date.getUTCMinutes() / 60 + 
-                     date.getUTCSeconds() / 3600;
+        const date = new Date(Number(ts));
+        const utcHours = date.getUTCHours() + 
+                         date.getUTCMinutes() / 60 + 
+                         date.getUTCSeconds() / 3600;
 
-    // 2. Adjust for Longitude (Aboyne is ~2.8° West, so -2.8)
-    // Every 1 degree of longitude is 4 minutes of time
-    const localSolarTime = (utcHours + (lon / 15) + 24) % 24;
-
-    // 3. Map 24 hours to 360 degrees
-    // We want 12:00 (Noon) to be 180° (Bottom) or 0° (Top) 
-    // depending on your SVG orientation.
-    let rotation = (localSolarTime / 24) * 360;
-
-    return rotation; // This will be ~237° right now
-}
+        // Solar time adjusted for the "Location of Truth" (Longitude)
+        const localSolarTime = (utcHours + (lon / 15) + 24) % 24;
+        return (localSolarTime / 24) * 360;
+    }
 
     /**
      * Close database connection

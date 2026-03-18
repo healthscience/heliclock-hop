@@ -1,6 +1,6 @@
 {
   "name": "heliclock-hop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "HeliCore WASM engine for HOP",
   "main": "src/index.js",
   "type": "module",
