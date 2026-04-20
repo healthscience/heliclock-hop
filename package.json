@@ -1,6 +1,6 @@
 {
   "name": "heliclock-hop",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "HeliCore WASM engine for HOP",
   "main": "src/index.js",
   "type": "module",
@@ -11,7 +11,7 @@
   "author": "aboynejames",
   "dependencies": {
     "better-sqlite3": "^11.0.0",
-    "location-hop": "file:../agents/location-hop"
+    "location-hop": "0.1.1"
   },
   "devDependencies": {
     "vitest": "^4.0.18"
