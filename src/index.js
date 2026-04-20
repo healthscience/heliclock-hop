@@ -37,6 +37,7 @@ class HeliLocation extends EventEmitter  {
         await initHeliCore(wasmBuffer);
 
         this.heliCoreInitialized = true;
+
       }
     }
 
@@ -45,6 +46,11 @@ class HeliLocation extends EventEmitter  {
      * Generates a coordinate relative to the 2026 Spring Equinox.
      * Use this for all Peer-to-Peer contracts and shared Besearch cycles.
      */
+    helistamp(internalMs) {
+        const netStamp = this.getHeliStamp(internalMs || Date.now());
+        return parseFloat(netStamp.age);
+    }
+
     getHeliStamp(internalMs) {
         const ts = BigInt(internalMs);
         
@@ -232,8 +238,8 @@ class HeliLocation extends EventEmitter  {
     *  Calculate age from gensis signature
     */
     activateSolarHeartbeat(signature) {
-        this.lat = signature.location.lat;
-        this.lon = signature.location.long;
+        this.lat = signature.location.lat || signature.location.latitude;
+        this.lon = signature.location.long || signature.location.longitude;
         this.birthOrbital = signature.orbital; // The degree when they were born
         this.baseOrbits = signature.orbits;    // The "Laps" completed at setup
         this.emit('HELI_DEGREE_SIGNATURE', {
