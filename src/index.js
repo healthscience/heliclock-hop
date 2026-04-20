@@ -64,7 +64,7 @@ class HeliLocation extends EventEmitter  {
         const networkArc = this.calculateDailyRotation(ts, NETWORK_LONGITUDE) / 360;
 
         return {
-            age: networkYear.toFixed(9), // Public Network Age
+            age: networkYear.toFixed(9), // Public Network Age 
             arc: networkArc.toFixed(4),  // Shared Geometric position
             stamp: `net.${networkYear.toFixed(9)}`
         };
