@@ -238,6 +238,10 @@ class HeliLocation extends EventEmitter  {
     *  Calculate age from gensis signature
     */
     activateSolarHeartbeat(signature) {
+        if (!signature || !signature.location) {
+            console.warn('HeliLocation: Cannot activate solar heartbeat with null location signature');
+            return;
+        }
         this.lat = signature.location.lat || signature.location.latitude;
         this.lon = signature.location.long || signature.location.longitude;
         this.birthOrbital = signature.orbital; // The degree when they were born

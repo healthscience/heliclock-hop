@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { LocationHop } from '../src/index.js';
+import HeliLocation from '../src/index.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -10,7 +10,7 @@ describe('LocationHop', () => {
     let hopper;
 
     beforeAll(async () => {
-        hopper = new LocationHop();
+        hopper = new HeliLocation();
         await hopper.init();
     });
 
@@ -50,5 +50,20 @@ describe('LocationHop', () => {
     it('should return empty array for non-existent location', () => {
         const results = hopper.search('NonExistentCityXYZ123');
         expect(results).toEqual([]);
+    });
+
+    it('should report correct database source (Dev vs Deployed)', () => {
+        const { getDatabasePath } = require('location-hop');
+        const dbPath = getDatabasePath();
+        console.log(`Active Database: ${dbPath}`);
+
+        if (dbPath.includes('.hop-models') || dbPath.includes('hop-models')) {
+            console.log('Mode: DEPLOYED (Global Home Directory)');
+            expect(dbPath).toMatch(/[\\\/]\.?hop-models[\\\/]place[\\\/]cities\.db$/);
+        } else {
+            console.log('Mode: DEVELOPER (Local Package Directory)');
+            expect(dbPath).toContain('location-hop');
+            expect(dbPath).toMatch(/cities\.db$/);
+        }
     });
 });
